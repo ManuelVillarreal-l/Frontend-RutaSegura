@@ -59,3 +59,7 @@ Create it on Render with **New → Blueprint** and select this repository.
 | Coordinator | admin@rutasegura.com | Admin123* |
 | Driver | conductor@rutasegura.com | Conductor123* |
 | Guardian | acudiente@rutasegura.com | Acudiente123* |
+
+
+
+
