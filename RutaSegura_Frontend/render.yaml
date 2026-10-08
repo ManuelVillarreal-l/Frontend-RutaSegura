@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: rutasegura-web
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: VITE_API_URL
+        value: https://rutasegura-api-g7n4.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
