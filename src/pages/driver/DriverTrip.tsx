@@ -400,3 +400,6 @@ function QrForm({ onScan, disabled }: { onScan: (code: string) => void; disabled
   );
 }
 
+
+
+
