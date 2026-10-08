@@ -178,3 +178,7 @@ export async function loadHistories(studentIds: number[]): Promise<Record<number
   const entries = await Promise.all(studentIds.map(async (id) => [id, await api.history(id)] as const));
   return Object.fromEntries(entries);
 }
+
+
+
+
