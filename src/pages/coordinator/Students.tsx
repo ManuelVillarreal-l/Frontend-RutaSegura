@@ -1,188 +1,403 @@
-// Coordinator: list, search and register students.
+// Students: fast search (AVL tree on the server), registration with guardians and
+// printable ID card with QR code.
 
-import { useState, type FormEvent } from "react";
-import { api, loadAllStops } from "../../api";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { api, type NewStudent } from "../../api";
+import { useCatalog } from "../../auth";
+import { RiskPill } from "../../components/Charts";
 import { ErrorBox, Loading, Notice, PageHeader } from "../../components/Feedback";
-import { useLoad } from "../../useLoad";
+import { SelectField, TextField } from "../../components/Fields";
+import { QrCard } from "../../components/QrCard";
+import { age, formatDateTime, RISK_LABEL } from "../../format";
+import { useLoad } from "../../hooks";
+import type { Student } from "../../types";
+import { check, FIELD_MESSAGES, RULES } from "../../validation";
 
 export function Students() {
-  const { data, error, loading, reload } = useLoad(async () => {
-    const [students, routes, users] = await Promise.all([api.students(), api.routes(), api.users()]);
-    const stopsByRoute = await loadAllStops(routes);
-    return { students, routes, users, stopsByRoute };
+  const data = useLoad(async () => {
+    const [students, routes, schools, guardians] = await Promise.all([
+      api.students(),
+      api.routes(),
+      api.schools(),
+      api.users("guardian"),
+    ]);
+    return { students, routes, schools, guardians };
   }, []);
   const [query, setQuery] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [created, setCreated] = useState<string | null>(null);
+  const [found, setFound] = useState<Student[] | null>(null);
+  const [selected, setSelected] = useState<Student | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  if (loading && !data) return <Loading />;
-  if (error || !data) return <ErrorBox message={error ?? "Error"} onRetry={reload} />;
+  // Search by name or last name with the AVL index of the API (prefix search).
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setFound(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      api.searchStudents(q).then(setFound).catch(() => setFound([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
-  const { students, routes, users, stopsByRoute } = data;
-  const guardians = users.filter((u) => u.role === "guardian");
-  const routeName = (id: number | null) => routes.find((r) => r.id === id)?.name ?? "—";
-  const stopName = (id: number | null) => Object.values(stopsByRoute).flat().find((s) => s.id === id)?.name ?? "—";
-  const guardianName = (id: number | null) => users.find((u) => u.id === id)?.name ?? "—";
+  if (data.loading && !data.data) return <Loading />;
+  if (data.error || !data.data) return <ErrorBox message={data.error ?? "Error"} onRetry={data.reload} />;
 
-  const needle = query.trim().toLowerCase();
-  const visible = students.filter(
-    (s) => !needle || s.full_name.toLowerCase().includes(needle) || s.qr_code.toLowerCase().includes(needle),
-  );
+  const { students, routes, schools } = data.data;
+  const list = found ?? students;
+  const routeName = (id: number | null) => routes.find((r) => r.id === id)?.name ?? "Sin ruta";
 
   return (
     <>
       <PageHeader title="Estudiantes">
-        <button type="button" className="button button-primary" onClick={() => setShowForm((v) => !v)} aria-expanded={showForm}>
-          {showForm ? "Cerrar formulario" : "Registrar estudiante"}
+        <button type="button" className="button button-primary" onClick={() => setCreating((v) => !v)}>
+          {creating ? "Cerrar formulario" : "Registrar estudiante"}
         </button>
       </PageHeader>
 
-      {showForm && (
+      {creating && (
         <StudentForm
-          routes={routes}
-          stopsByRoute={stopsByRoute}
-          guardians={guardians}
-          onCreated={(name, qr) => {
-            setCreated(`${name} quedó registrado con el código ${qr}.`);
-            setShowForm(false);
-            void reload();
+          data={data.data}
+          onCreated={async (student) => {
+            setCreating(false);
+            await data.reload(true);
+            setSelected(student);
           }}
         />
       )}
-      {created && <Notice kind="success">{created}</Notice>}
 
       <label className="field search">
-        <span>Buscar por nombre o código QR</span>
-        <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <span>Buscar por nombre o apellido</span>
+        <input
+          type="search"
+          value={query}
+          maxLength={40}
+          placeholder="Ej.: val, pérez…"
+          onChange={(e) => setQuery(e.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü ]/g, ""))}
+        />
+        <small className="field-hint">Búsqueda por prefijo con un árbol AVL (sin importar tildes).</small>
       </label>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Grado</th>
-              <th>Código QR</th>
-              <th>Acudiente</th>
-              <th>Ruta</th>
-              <th>Parada</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((student) => (
-              <tr key={student.id}>
-                <td>{student.full_name}</td>
-                <td>{student.grade}</td>
-                <td><code>{student.qr_code}</code></td>
-                <td>{guardianName(student.guardian_id)}</td>
-                <td>{routeName(student.route_id)}</td>
-                <td>{stopName(student.stop_id)}</td>
+      <div className="split">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Estudiante</th>
+                <th>Grado</th>
+                <th>Ruta</th>
+                <th>Carnet</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {visible.length === 0 && <p className="muted table-empty">Ningún estudiante coincide con “{query}”.</p>}
+            </thead>
+            <tbody>
+              {list.map((s) => (
+                <tr key={s.id} className={selected?.id === s.id ? "is-selected" : ""}>
+                  <td>
+                    <button type="button" className="link-button" onClick={() => setSelected(s)}>
+                      {s.full_name}
+                    </button>
+                    <br />
+                    <small className="muted">
+                      {s.document_type.code.toUpperCase()} {s.document_number} · {age(s.birth_date)} años
+                    </small>
+                  </td>
+                  <td>{s.grade.name}</td>
+                  <td>{routeName(s.route_id)}</td>
+                  <td>
+                    <code>{s.qr_code}</code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {list.length === 0 && <p className="table-empty muted">Sin resultados.</p>}
+        </div>
+
+        {selected && (
+          <StudentDetail
+            key={selected.id}
+            student={selected}
+            routeName={routeName(selected.route_id)}
+            schoolName={schools[0]?.name}
+            onClose={() => setSelected(null)}
+          />
+        )}
       </div>
     </>
   );
 }
 
-function StudentForm({
-  routes,
-  stopsByRoute,
-  guardians,
-  onCreated,
+function StudentDetail({
+  student,
+  routeName,
+  schoolName,
+  onClose,
 }: {
-  routes: { id: number; name: string }[];
-  stopsByRoute: Record<number, { id: number; name: string }[]>;
-  guardians: { id: number; name: string }[];
-  onCreated: (name: string, qr: string) => void;
+  student: Student;
+  routeName: string;
+  schoolName?: string;
+  onClose: () => void;
 }) {
-  const [form, setForm] = useState({
-    full_name: "",
-    grade: "",
-    school: "Institución Educativa Rural",
-    guardian_id: guardians[0]?.id ?? 0,
-    route_id: routes[0]?.id ?? 0,
-    stop_id: 0,
-    qr_code: "",
-  });
+  const detail = useLoad(async () => {
+    const [history, risk, stops] = await Promise.all([
+      api.history(student.id, 10),
+      api.absenceRisk(student.id),
+      student.route_id ? api.stops(student.route_id) : Promise.resolve([]),
+    ]);
+    return { history, risk, stops };
+  }, [student.id]);
+  const stopName = detail.data?.stops.find((s) => s.id === student.stop_id)?.name;
+
+  return (
+    <aside className="panel detail">
+      <div className="detail-head">
+        <h2>{student.full_name}</h2>
+        <button type="button" className="button button-quiet" onClick={onClose}>
+          Cerrar
+        </button>
+      </div>
+      <div className="printable">
+        <QrCard student={student} routeName={routeName} stopName={stopName} schoolName={schoolName} />
+      </div>
+      <button type="button" className="button button-quiet" onClick={() => window.print()}>
+        Imprimir carnet
+      </button>
+
+      <h3>Acudientes</h3>
+      <ul className="plain-list">
+        {student.guardians.map((g) => (
+          <li key={g.guardian_id} className="list-row">
+            <span>
+              {g.full_name}
+              <small>
+                {g.relationship}
+                {g.is_primary ? " · principal" : ""} · {g.phone}
+              </small>
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {detail.data && (
+        <>
+          <h3>Riesgo de inasistencia (IA)</h3>
+          <p>
+            <RiskPill risk={detail.data.risk.risk} label={RISK_LABEL[detail.data.risk.risk]} />{" "}
+            <span className="muted">{detail.data.risk.explanation}</span>
+          </p>
+          <h3>Últimos movimientos</h3>
+          {detail.data.history.length === 0 ? (
+            <p className="muted">Sin registros.</p>
+          ) : (
+            <ul className="plain-list">
+              {detail.data.history.map((e) => (
+                <li key={e.id} className="list-row">
+                  <span>
+                    {e.event_type.name}
+                    <small>
+                      {formatDateTime(e.timestamp)} · {e.method.name}
+                    </small>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </aside>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type FormData = {
+  routes: { id: number; name: string; campus_id: number }[];
+  schools: { campuses: { id: number; name: string }[] }[];
+  guardians: { id: number; first_name: string; last_name: string; document_number: string }[];
+};
+
+interface GuardianRow {
+  guardian_id: string;
+  relationship_code: string;
+}
+
+function StudentForm({ data, onCreated }: { data: FormData; onCreated: (s: Student) => void }) {
+  const documentTypes = useCatalog("document_types");
+  const grades = [...useCatalog("grades")].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const relationships = useCatalog("relationships");
+  const campuses = data.schools.flatMap((s) => s.campuses);
+
+  const [docType, setDocType] = useState("ti");
+  const [docNumber, setDocNumber] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [grade, setGrade] = useState("");
+  const [campusId, setCampusId] = useState(String(campuses[0]?.id ?? ""));
+  const [routeId, setRouteId] = useState("");
+  const [stopId, setStopId] = useState("");
+  const [guardians, setGuardians] = useState<GuardianRow[]>([{ guardian_id: "", relationship_code: "" }]);
+  const [primary, setPrimary] = useState(0);
+  const [tried, setTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const stops = stopsByRoute[form.route_id] ?? [];
-  const stopId = stops.some((s) => s.id === form.stop_id) ? form.stop_id : stops[0]?.id ?? 0;
+  const [busy, setBusy] = useState(false);
+
+  const stops = useLoad(() => (routeId ? api.stops(Number(routeId)) : Promise.resolve([])), [routeId]);
+  const pickupStops = (stops.data ?? []).slice(0, -1); // the last stop is the school
+
+  // Allowed ages: 3 to 20 years (the API checks the same).
+  const bounds = useMemo(() => {
+    const now = new Date();
+    const iso = (years: number) => new Date(now.getFullYear() - years, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+    return { min: iso(20), max: iso(3) };
+  }, []);
+
+  const problems = [
+    check(RULES.document, docNumber),
+    check(RULES.personName, firstName),
+    check(RULES.personName, lastName),
+    !birthDate || birthDate < bounds.min || birthDate > bounds.max ? "La edad debe estar entre 3 y 20 años." : null,
+    !grade ? "Seleccione el grado." : null,
+    !campusId ? "Seleccione la sede." : null,
+    routeId && !stopId ? "Seleccione la parada donde sube el estudiante." : null,
+    guardians.some((g) => !g.guardian_id || !g.relationship_code) ? "Complete los datos de cada acudiente." : null,
+    new Set(guardians.map((g) => g.guardian_id)).size !== guardians.length ? "Un acudiente está repetido." : null,
+  ].filter(Boolean) as string[];
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setSending(true);
+    setTried(true);
+    if (problems.length) return;
+    setBusy(true);
     setError(null);
+    const payload: NewStudent = {
+      document_type_code: docType,
+      document_number: docNumber,
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      birth_date: birthDate,
+      grade_code: grade,
+      campus_id: Number(campusId),
+      route_id: routeId ? Number(routeId) : null,
+      stop_id: stopId ? Number(stopId) : null,
+      guardians: guardians.map((g, i) => ({
+        guardian_id: Number(g.guardian_id),
+        relationship_code: g.relationship_code,
+        is_primary: i === primary,
+      })),
+    };
     try {
-      const student = await api.createStudent({
-        full_name: form.full_name.trim(),
-        grade: form.grade.trim(),
-        school: form.school.trim(),
-        guardian_id: form.guardian_id || null,
-        route_id: form.route_id || null,
-        stop_id: stopId || null,
-        qr_code: form.qr_code.trim() || null,
-      });
-      onCreated(student.full_name, student.qr_code);
+      onCreated(await api.createStudent(payload));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo registrar.");
     } finally {
-      setSending(false);
+      setBusy(false);
     }
   }
 
-  const set = (key: keyof typeof form) => (e: { target: { value: string } }) =>
-    setForm({ ...form, [key]: ["guardian_id", "route_id", "stop_id"].includes(key) ? Number(e.target.value) : e.target.value });
-
   return (
-    <form className="panel form form-grid" onSubmit={submit}>
-      <label className="field">
-        <span>Nombre completo</span>
-        <input required value={form.full_name} onChange={set("full_name")} />
-      </label>
-      <label className="field">
-        <span>Grado</span>
-        <input required value={form.grade} onChange={set("grade")} placeholder="Ej.: 5°" />
-      </label>
-      <label className="field">
-        <span>Institución</span>
-        <input required value={form.school} onChange={set("school")} />
-      </label>
-      <label className="field">
-        <span>Acudiente</span>
-        <select value={form.guardian_id} onChange={set("guardian_id")}>
-          {guardians.map((g) => (
-            <option key={g.id} value={g.id}>{g.name}</option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>Ruta</span>
-        <select value={form.route_id} onChange={set("route_id")}>
-          {routes.map((r) => (
-            <option key={r.id} value={r.id}>{r.name}</option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>Parada donde lo recogen</span>
-        <select value={stopId} onChange={set("stop_id")}>
-          {stops.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        <span>Código QR (opcional)</span>
-        <input value={form.qr_code} onChange={set("qr_code")} placeholder="Se genera solo si lo deja vacío" />
-      </label>
+    <form className="panel form" onSubmit={submit} noValidate>
+      <h2>Nuevo estudiante</h2>
+      <div className="form-grid">
+        <SelectField
+          label="Tipo de documento"
+          value={docType}
+          onChange={setDocType}
+          options={documentTypes.map((d) => ({ value: d.code, label: d.name }))}
+        />
+        <TextField label="Número de documento" rule={RULES.document} value={docNumber} onChange={setDocNumber} inputMode="numeric" showErrors={tried} />
+        <TextField label="Nombres" rule={RULES.personName} value={firstName} onChange={setFirstName} autoComplete="off" showErrors={tried} />
+        <TextField label="Apellidos" rule={RULES.personName} value={lastName} onChange={setLastName} autoComplete="off" showErrors={tried} />
+        <label className="field">
+          <span className="field-label">Fecha de nacimiento</span>
+          <input type="date" value={birthDate} min={bounds.min} max={bounds.max} required onChange={(e) => setBirthDate(e.target.value)} />
+          <small className="field-hint">Entre 3 y 20 años de edad.</small>
+        </label>
+        <SelectField
+          label="Grado"
+          value={grade}
+          onChange={setGrade}
+          placeholder="Seleccione…"
+          options={grades.map((g) => ({ value: g.code, label: g.name }))}
+        />
+        <SelectField label="Sede" value={campusId} onChange={setCampusId} options={campuses.map((c) => ({ value: c.id, label: c.name }))} />
+        <SelectField
+          label="Ruta"
+          required={false}
+          value={routeId}
+          onChange={(v) => {
+            setRouteId(v);
+            setStopId("");
+          }}
+          placeholder="Sin ruta"
+          options={data.routes.filter((r) => String(r.campus_id) === campusId).map((r) => ({ value: r.id, label: r.name }))}
+        />
+        <SelectField
+          label="Parada"
+          value={stopId}
+          onChange={setStopId}
+          required={Boolean(routeId)}
+          disabled={!routeId}
+          placeholder="Seleccione…"
+          options={pickupStops.map((s) => ({ value: s.id, label: `${s.order}. ${s.name}` }))}
+        />
+      </div>
+
+      <fieldset className="fieldset">
+        <legend>Acudientes (1 a 4)</legend>
+        {guardians.map((row, index) => (
+          <div key={index} className="guardian-row">
+            <SelectField
+              label={`Acudiente ${index + 1}`}
+              value={row.guardian_id}
+              placeholder="Seleccione…"
+              onChange={(v) => setGuardians((list) => list.map((g, i) => (i === index ? { ...g, guardian_id: v } : g)))}
+              options={data.guardians.map((g) => ({ value: g.id, label: `${g.first_name} ${g.last_name} · ${g.document_number}` }))}
+            />
+            <SelectField
+              label="Parentesco"
+              value={row.relationship_code}
+              placeholder="Seleccione…"
+              onChange={(v) => setGuardians((list) => list.map((g, i) => (i === index ? { ...g, relationship_code: v } : g)))}
+              options={relationships.map((r) => ({ value: r.code, label: r.name }))}
+            />
+            <label className="radio">
+              <input type="radio" name="primary" checked={primary === index} onChange={() => setPrimary(index)} /> Principal
+            </label>
+            {guardians.length > 1 && (
+              <button
+                type="button"
+                className="button button-quiet"
+                onClick={() => {
+                  setGuardians((list) => list.filter((_, i) => i !== index));
+                  setPrimary(0);
+                }}
+              >
+                Quitar
+              </button>
+            )}
+          </div>
+        ))}
+        {guardians.length < 4 && (
+          <button type="button" className="button button-quiet" onClick={() => setGuardians((l) => [...l, { guardian_id: "", relationship_code: "" }])}>
+            + Agregar acudiente
+          </button>
+        )}
+        <small className="field-hint">Si el acudiente no aparece, créelo primero en Usuarios con el rol Acudiente.</small>
+      </fieldset>
+
+      {tried && problems.length > 0 && (
+        <Notice kind="error">
+          Revise los campos marcados en rojo.{" "}
+          {[...new Set(problems.filter((p) => !FIELD_MESSAGES.has(p)))].join(" ")}
+        </Notice>
+      )}
+      {error && <p className="form-error">{error}</p>}
       <div className="form-actions">
-        {error && <p className="form-error" role="alert">{error}</p>}
-        <button type="submit" className="button button-primary" disabled={sending}>
-          {sending ? "Guardando…" : "Guardar estudiante"}
+        <span className="muted">El código QR del carnet se genera automáticamente.</span>
+        <button type="submit" className="button button-primary" disabled={busy}>
+          {busy ? "Guardando…" : "Registrar estudiante"}
         </button>
       </div>
     </form>

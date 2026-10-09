@@ -3,12 +3,16 @@ import { SessionProvider, useSession } from "./auth";
 import { Loading } from "./components/Feedback";
 import { Layout } from "./components/Layout";
 import { Login } from "./pages/Login";
+import { Notifications } from "./pages/Notifications";
+import { Catalogs } from "./pages/coordinator/Catalogs";
 import { Dashboard } from "./pages/coordinator/Dashboard";
-import { Students } from "./pages/coordinator/Students";
+import { Fleet } from "./pages/coordinator/Fleet";
+import { Intelligence } from "./pages/coordinator/Intelligence";
+import { Audit, Incidents, Structures } from "./pages/coordinator/Monitoring";
 import { RoutesPage } from "./pages/coordinator/RoutesPage";
+import { Students } from "./pages/coordinator/Students";
 import { Trips } from "./pages/coordinator/Trips";
 import { Users } from "./pages/coordinator/Users";
-import { DelayPrediction } from "./pages/coordinator/DelayPrediction";
 import { DriverTrip } from "./pages/driver/DriverTrip";
 import { GuardianHome } from "./pages/guardian/GuardianHome";
 
@@ -27,28 +31,34 @@ function AppRoutes() {
 
   if (checking) return <Loading text="Abriendo RutaSegura…" />;
   if (!user) return <Login />;
+  const role = user.role.code;
 
   return (
     <Routes>
       <Route element={<Layout />}>
-        {user.role === "coordinator" && (
+        {role === "coordinator" && (
           <>
             <Route index element={<Dashboard />} />
             <Route path="estudiantes" element={<Students />} />
             <Route path="rutas" element={<RoutesPage />} />
             <Route path="recorridos" element={<Trips />} />
             <Route path="usuarios" element={<Users />} />
-            <Route path="retrasos" element={<DelayPrediction />} />
+            <Route path="flota" element={<Fleet />} />
+            <Route path="catalogos" element={<Catalogs />} />
+            <Route path="inteligencia" element={<Intelligence />} />
+            <Route path="incidentes" element={<Incidents />} />
+            <Route path="estructuras" element={<Structures />} />
+            <Route path="auditoria" element={<Audit />} />
           </>
         )}
-        {user.role === "driver" && (
+        {(role === "driver" || role === "monitor") && (
           <>
             <Route index element={<DriverTrip />} />
-            <Route path="retrasos" element={<DelayPrediction />} />
+            <Route path="inteligencia" element={<Intelligence />} />
           </>
         )}
-        {user.role === "monitor" && <Route index element={<DriverTrip />} />}
-        {user.role === "guardian" && <Route index element={<GuardianHome />} />}
+        {role === "guardian" && <Route index element={<GuardianHome />} />}
+        <Route path="notificaciones" element={<Notifications />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
