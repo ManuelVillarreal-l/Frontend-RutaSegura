@@ -102,6 +102,9 @@ export function Trips() {
                         Seguir en el mapa
                       </button>
                     )}
+                    {t.status.code === "scheduled" && (
+                      <CancelTripButton tripId={t.id} onCancelled={() => trips.reload(true)} />
+                    )}
                   </td>
                 </tr>
               ))}
@@ -240,5 +243,46 @@ function TripForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// Two-step confirmation: the first click asks, the second one cancels the trip.
+function CancelTripButton({ tripId, onCancelled }: { tripId: number; onCancelled: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function cancel() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.cancelTrip(tripId);
+      onCancelled();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cancelar.");
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <>
+      <br />
+      {confirming ? (
+        <>
+          <button type="button" className="link-button" disabled={busy} onClick={() => void cancel()}>
+            {busy ? "Cancelando…" : "Sí, cancelar"}
+          </button>{" "}
+          <button type="button" className="link-button" disabled={busy} onClick={() => setConfirming(false)}>
+            No
+          </button>
+        </>
+      ) : (
+        <button type="button" className="link-button" onClick={() => setConfirming(true)}>
+          Cancelar recorrido
+        </button>
+      )}
+      {error && <small className="field-error"> {error}</small>}
+    </>
   );
 }

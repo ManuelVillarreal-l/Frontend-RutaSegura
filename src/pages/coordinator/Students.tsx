@@ -121,6 +121,12 @@ export function Students() {
             routeName={routeName(selected.route_id)}
             schoolName={schools[0]?.name}
             onClose={() => setSelected(null)}
+            onWithdrawn={async () => {
+              setSelected(null);
+              setFound(null);
+              setQuery("");
+              await data.reload(true);
+            }}
           />
         )}
       </div>
@@ -133,12 +139,28 @@ function StudentDetail({
   routeName,
   schoolName,
   onClose,
+  onWithdrawn,
 }: {
   student: Student;
   routeName: string;
   schoolName?: string;
   onClose: () => void;
+  onWithdrawn: () => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
+  async function withdraw() {
+    setWithdrawError(null);
+    try {
+      await api.withdrawStudent(student.id);
+      onWithdrawn();
+    } catch (err) {
+      setWithdrawError(err instanceof Error ? err.message : "No se pudo retirar.");
+      setConfirming(false);
+    }
+  }
+
   const detail = useLoad(async () => {
     const [history, risk, stops] = await Promise.all([
       api.history(student.id, 10),
@@ -163,6 +185,23 @@ function StudentDetail({
       <button type="button" className="button button-quiet" onClick={() => window.print()}>
         Imprimir carnet
       </button>
+      {student.active &&
+        (confirming ? (
+          <p>
+            ¿Retirar a {student.first_name}? Se conserva su historial.{" "}
+            <button type="button" className="button button-danger" onClick={() => void withdraw()}>
+              Sí, retirar
+            </button>{" "}
+            <button type="button" className="button button-quiet" onClick={() => setConfirming(false)}>
+              No
+            </button>
+          </p>
+        ) : (
+          <button type="button" className="button button-quiet" onClick={() => setConfirming(true)}>
+            Retirar estudiante
+          </button>
+        ))}
+      {withdrawError && <Notice kind="error">{withdrawError}</Notice>}
 
       <h3>Acudientes</h3>
       <ul className="plain-list">
