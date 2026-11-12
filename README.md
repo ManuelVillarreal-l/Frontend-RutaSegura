@@ -74,10 +74,28 @@ src/
 ## Run locally
 ```
 npm install
-copy .env.example .env
+copy .env.example .env      (Linux / macOS: cp .env.example .env)
 npm run dev
 ```
 Open http://localhost:5173. The camera and GPS need HTTPS (or localhost).
+
+To use a local API instead of the deployed one, change `VITE_API_URL` in `.env` to
+`http://127.0.0.1:8000` and restart `npm run dev`.
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server with hot reload |
+| `npm run typecheck` | Check TypeScript types without building |
+| `npm run build` | Type check + production build in `dist/` (the same as Render) |
+| `npm run preview` | Serve the `dist/` build locally |
+
+## Demo users
+| Role | Email | Password |
+|---|---|---|
+| Coordinator | admin@rutasegura.com | Admin123* |
+| Driver | conductor@rutasegura.com | Conductor123* |
+| Monitor | monitor@rutasegura.com | Monitor123* |
+| Guardian | acudiente@rutasegura.com | Acudiente123* |
 
 ## Deployment
 `render.yaml` publishes the static site on Render (`npm ci && npm run build`, folder `dist`).
