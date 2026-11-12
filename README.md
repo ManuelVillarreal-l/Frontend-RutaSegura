@@ -5,6 +5,16 @@ Built with React + TypeScript (Vite). The interface is in Spanish; the code is i
 
 It talks to the [RutaSegura API](https://rutasegura-api-g7n4.onrender.com/docs).
 
+## Live
+| Part | URL |
+|---|---|
+| Web app | https://rutasegura-web-lidi.onrender.com |
+| API (Swagger) | https://rutasegura-api-g7n4.onrender.com/docs |
+| API health | https://rutasegura-api-g7n4.onrender.com/health |
+
+Both run on the free Render plan: after 15 minutes without visits the API sleeps and the
+first request takes about one minute. Open the app a few minutes before a presentation.
+
 ## Screens by role
 | Role | What they can do |
 |---|---|
