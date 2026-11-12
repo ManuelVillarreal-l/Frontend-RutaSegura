@@ -454,3 +454,12 @@ tr.is-inactive td { opacity: .55; }
   .session-timer { font-size: .8rem; }
   .topbar-user { gap: .4rem; }
 }
+
+/* Attendance matrix */
+.matrix th, .matrix td { text-align: center; }
+.matrix th:first-child, .matrix td:first-child { text-align: left; white-space: nowrap; }
+.matrix-day { font-size: .78rem; white-space: nowrap; text-transform: capitalize; }
+.matrix-cell { font-weight: 700; font-family: ui-monospace, monospace; }
+.cell-present { background: #e3f4ea; color: #1d6b3f; }
+.cell-absent { background: #fde8e6; color: #a5281b; }
+.cell-none { color: #9aa29d; }

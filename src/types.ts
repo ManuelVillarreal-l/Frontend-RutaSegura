@@ -315,3 +315,19 @@ export interface SyncResult {
   duplicated: number;
   rejected: string[];
 }
+
+export interface AttendanceMatrix {
+  route_id: number;
+  route_name: string;
+  days: string[];
+  students: {
+    student_id: number;
+    full_name: string;
+    present: number;
+    absent: number;
+    attendance_rate: number | null;
+  }[];
+  cells: string[][];
+  present_per_day: number[];
+  legend: Record<string, string>;
+}

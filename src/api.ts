@@ -4,6 +4,7 @@ import { passwordDigest } from "./crypto";
 import type {
   AbsenceRisk,
   AttendanceEvent,
+  AttendanceMatrix,
   AuditEntry,
   BoardingQueue,
   BusLocation,
@@ -172,6 +173,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 const post = <T>(path: string, data?: unknown) =>
   request<T>(path, { method: "POST", body: data === undefined ? undefined : JSON.stringify(data) });
 const put = <T>(path: string, data: unknown) => request<T>(path, { method: "PUT", body: JSON.stringify(data) });
+const del = <T>(path: string) => request<T>(path, { method: "DELETE" });
 const patch = <T>(path: string, data?: unknown) =>
   request<T>(path, { method: "PATCH", body: data === undefined ? undefined : JSON.stringify(data) });
 
@@ -290,6 +292,9 @@ export const api = {
   createStudent: (data: NewStudent) => post<Student>("/api/students/", data),
   history: (studentId: number, limit = 30) =>
     request<AttendanceEvent[]>(`/api/students/${studentId}/history${query({ limit })}`),
+  withdrawStudent: (studentId: number) => del<Student>(`/api/students/${studentId}`),
+  attendanceMatrix: (routeId: number, days = 10) =>
+    request<AttendanceMatrix>(`/api/attendance/matrix${query({ route_id: routeId, days })}`),
   absenceRisk: (studentId: number) => request<AbsenceRisk>(`/api/students/${studentId}/absence-risk`),
 
   // Trips
@@ -304,6 +309,7 @@ export const api = {
   }) => post<Trip>("/api/trips/", data),
   startTrip: (tripId: number, weather_code: string, road_condition_code: string) =>
     post<Trip>(`/api/trips/${tripId}/start`, { weather_code, road_condition_code }),
+  cancelTrip: (tripId: number) => del<{ cancelled: boolean }>(`/api/trips/${tripId}`),
   finishTrip: (tripId: number) => post<Trip>(`/api/trips/${tripId}/finish`),
   tripEvents: (tripId: number) => request<AttendanceEvent[]>(`/api/trips/${tripId}/events`),
   queue: (tripId: number) => request<BoardingQueue>(`/api/trips/${tripId}/queue`),

@@ -8,6 +8,7 @@ import { Catalogs } from "./pages/coordinator/Catalogs";
 import { Dashboard } from "./pages/coordinator/Dashboard";
 import { Fleet } from "./pages/coordinator/Fleet";
 import { Intelligence } from "./pages/coordinator/Intelligence";
+import { Attendance } from "./pages/coordinator/Attendance";
 import { Audit, Incidents, Structures } from "./pages/coordinator/Monitoring";
 import { RoutesPage } from "./pages/coordinator/RoutesPage";
 import { Students } from "./pages/coordinator/Students";
@@ -42,6 +43,7 @@ function AppRoutes() {
             <Route path="estudiantes" element={<Students />} />
             <Route path="rutas" element={<RoutesPage />} />
             <Route path="recorridos" element={<Trips />} />
+            <Route path="asistencia" element={<Attendance />} />
             <Route path="usuarios" element={<Users />} />
             <Route path="flota" element={<Fleet />} />
             <Route path="catalogos" element={<Catalogs />} />
