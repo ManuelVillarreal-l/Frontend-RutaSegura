@@ -22,6 +22,28 @@ first request takes about one minute. Open the app a few minutes before a presen
 | Driver / monitor | Start the trip choosing weather and road (or detect the weather by GPS), see the AI delay estimate, share the bus GPS, scan ID cards with the camera, boarding queue, undo, report incidents, work without internet and sync later, finish |
 | Guardian | Where each child is, the bus on the map in real time, arrival time to the child's stop, history, absence risk, notifications |
 
+## Pages (URL paths)
+| Path | Role | Page |
+|---|---|---|
+| `/` | Coordinator | Overview (map and attendance chart) |
+| `/estudiantes` | Coordinator | Students, guardians and QR ID card |
+| `/rutas` | Coordinator | Routes, stops, Dijkstra and AI optimization |
+| `/recorridos` | Coordinator | Schedule, edit, cancel and follow trips |
+| `/asistencia` | Coordinator | Attendance matrix (students × school days) |
+| `/usuarios` | Coordinator | Users and roles |
+| `/flota` | Coordinator | Vehicles and licenses |
+| `/catalogos` | Coordinator | Weather and road catalogs |
+| `/inteligencia` | Coordinator, driver, monitor | AI: delay prediction and route optimization |
+| `/incidentes` | Coordinator | Incidents |
+| `/estructuras` | Coordinator | Map of the data structures used by the API |
+| `/auditoria` | Coordinator | Audit log |
+| `/` | Driver / monitor | Current trip (GPS, QR scanner, boarding queue, undo) |
+| `/` | Guardian | Children, bus on the map and arrival time |
+| `/notificaciones` | Everyone | Notifications |
+
+Any other path redirects to `/`. `render.yaml` rewrites every path to `index.html`, so
+reloading the browser on any page works.
+
 ## Security
 - The password is turned into `SHA-256(email:password)` in the browser (`src/crypto.ts`) before it is sent; the real password never travels and is never stored.
 - Password fields are always masked, cannot be copied and accept at most 64 characters; new passwords must meet the policy (8–64 characters, upper and lower case, number, symbol, no spaces).
