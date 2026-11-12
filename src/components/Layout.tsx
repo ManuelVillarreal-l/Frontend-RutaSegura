@@ -12,6 +12,7 @@ const NAV: Record<RoleCode, { to: string; label: string }[]> = {
     { to: "/estudiantes", label: "Estudiantes" },
     { to: "/rutas", label: "Rutas" },
     { to: "/recorridos", label: "Recorridos" },
+    { to: "/asistencia", label: "Asistencia" },
     { to: "/usuarios", label: "Usuarios" },
     { to: "/flota", label: "Flota" },
     { to: "/catalogos", label: "Catálogos" },
