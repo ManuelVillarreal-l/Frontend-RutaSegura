@@ -313,10 +313,14 @@ function TripPanel({
           )}
           {offline.lastResult && <p className="muted">{offline.lastResult}</p>}
 
-          <div className="gps-bar">
+          <div className={`gps-bar ${sharing && gps.fix ? "is-live" : ""}`}>
+            <span className="live-dot" aria-hidden="true" />
             <label className="switch">
               <input type="checkbox" checked={sharing} onChange={(e) => setSharing(e.target.checked)} />
-              <span>Compartir ubicación del bus</span>
+              <span>
+                {sharing ? "Compartiendo la ubicación del bus" : "Ubicación del bus apagada"}
+                <small> · los acudientes ven el bus en su mapa y reciben aviso cuando se acerca</small>
+              </span>
             </label>
             <small className="muted">
               {gps.error ??
@@ -481,6 +485,7 @@ function StartTrip({ trip, stops, onStarted }: { trip: Trip; stops: Stop[]; onSt
         road_condition_code: road,
         stops_remaining: Math.max(stops.length - 1, 0),
         hour: localHour(),
+        preview: true, // only a preview: the prediction is saved when the trip starts
       })
       .then(setPrediction)
       .catch(() => setPrediction(null));
@@ -539,6 +544,10 @@ function StartTrip({ trip, stops, onStarted }: { trip: Trip; stops: Stop[]; onSt
           options={roads.map((r) => ({ value: r.code, label: `${r.name} (+${r.delay_minutes} min)` }))}
         />
       </div>
+      <small className="field-hint">
+        Las opciones salen de los catálogos de la base de datos. Si falta un clima o un estado de la vía, el coordinador lo
+        agrega en Catálogos.
+      </small>
       <div className="button-row">
         <button type="button" className="button button-quiet" disabled={detecting} onClick={() => void detect()}>
           {detecting ? "Consultando el clima…" : "Detectar clima con el GPS"}

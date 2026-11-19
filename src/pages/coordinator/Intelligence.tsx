@@ -7,35 +7,69 @@ import { useCatalog, useCurrentUser } from "../../auth";
 import { RiskPill } from "../../components/Charts";
 import { ErrorBox, Loading, PageHeader } from "../../components/Feedback";
 import { isValidNumber, NumberField, SelectField } from "../../components/Fields";
-import { localHour, RISK_LABEL } from "../../format";
-import { getPositionOnce, useLoad } from "../../hooks";
+import { Pagination } from "../../components/Pagination";
+import { formatDateTime, localHour, RISK_LABEL } from "../../format";
+import { detectWeather, useLoad } from "../../hooks";
 import type { AbsenceRisk, CurrentWeather, DelayPrediction, Student } from "../../types";
 
 export function Intelligence() {
   const user = useCurrentUser();
+  // Changes after each new prediction so the history table reloads.
+  const [saved, setSaved] = useState(0);
   return (
     <>
       <PageHeader title={user.role.code === "coordinator" ? "Inteligencia artificial" : "Predicción de retrasos"} />
       <div className="columns">
-        <DelayPanel />
+        <DelayPanel onSaved={() => setSaved((n) => n + 1)} />
         <WeatherPanel />
       </div>
+      <HistoryPanel refresh={saved} />
       {user.role.code === "coordinator" && <AbsencePanel />}
     </>
   );
 }
 
-function DelayPanel() {
+function DelayPanel({ onSaved }: { onSaved: () => void }) {
   const weathers = useCatalog("weather_conditions");
   const roads = useCatalog("road_conditions");
   const routes = useLoad(() => api.routes(), []);
   const [routeId, setRouteId] = useState("");
-  const [weather, setWeather] = useState("rain");
-  const [road, setRoad] = useState("fair");
+  // The options come from the catalogs of the database (nothing fixed in the code).
+  const [weather, setWeather] = useState("");
+  const [road, setRoad] = useState("");
   const [stops, setStops] = useState("4");
   const [hour, setHour] = useState(String(localHour()));
   const [result, setResult] = useState<DelayPrediction | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gps, setGps] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const weatherCode = weather || weathers[0]?.code || "";
+  const roadCode = road || roads[0]?.code || "";
+
+  // Choosing a route fills in how many stops it has.
+  async function chooseRoute(value: string) {
+    setRouteId(value);
+    if (!value) return;
+    const routeStops = await api.stops(Number(value)).catch(() => null);
+    if (routeStops) setStops(String(routeStops.length));
+  }
+
+  async function weatherFromGps() {
+    setDetecting(true);
+    setGps(null);
+    try {
+      const { weather: current, usedGps } = await detectWeather();
+      if (current.condition) setWeather(current.condition.code);
+      setGps(
+        `${current.condition?.name ?? "Clima sin equivalencia en el catálogo"} · ${current.temperature_c ?? "—"} °C` +
+          (usedGps ? " (según su ubicación GPS)" : " (sin permiso de GPS: se usó El Encano)"),
+      );
+    } catch (err) {
+      setGps(err instanceof Error ? err.message : "No se pudo detectar el clima. Elíjalo en la lista.");
+    } finally {
+      setDetecting(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -48,12 +82,13 @@ function DelayPanel() {
       setResult(
         await api.predictDelay({
           route_id: routeId ? Number(routeId) : null,
-          weather_code: weather,
-          road_condition_code: road,
+          weather_code: weatherCode,
+          road_condition_code: roadCode,
           stops_remaining: Number(stops),
           hour: Number(hour),
         }),
       );
+      onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo calcular.");
     }
@@ -72,15 +107,21 @@ function DelayPanel() {
             label="Ruta"
             required={false}
             value={routeId}
-            onChange={setRouteId}
+            onChange={(v) => void chooseRoute(v)}
             placeholder="Cualquiera"
             options={(routes.data ?? []).map((r) => ({ value: r.id, label: r.name }))}
           />
-          <SelectField label="Clima" value={weather} onChange={setWeather} options={weathers.map((w) => ({ value: w.code, label: w.name }))} />
-          <SelectField label="Vía" value={road} onChange={setRoad} options={roads.map((r) => ({ value: r.code, label: r.name }))} />
+          <div className="field-with-action">
+            <SelectField label="Clima" value={weatherCode} onChange={setWeather} options={weathers.map((w) => ({ value: w.code, label: w.name }))} />
+            <button type="button" className="button button-quiet button-small" disabled={detecting} onClick={() => void weatherFromGps()}>
+              {detecting ? "Detectando…" : "📍 Detectar con GPS"}
+            </button>
+          </div>
+          <SelectField label="Vía" value={roadCode} onChange={setRoad} options={roads.map((r) => ({ value: r.code, label: r.name }))} />
           <NumberField label="Paradas por recorrer" value={stops} onChange={setStops} min={0} max={50} />
           <NumberField label="Hora de salida (0-23)" value={hour} onChange={setHour} min={0} max={23} />
         </div>
+        {gps && <p className="field-hint">{gps}</p>}
         <button type="submit" className="button button-primary">
           Predecir
         </button>
@@ -104,6 +145,7 @@ function DelayPanel() {
               El modelo explica el {Math.round(result.r_squared * 100)}% de la variación real de los retrasos (R²).
             </p>
           )}
+          <p className="form-success">✔ Predicción guardada en la base de datos (ver historial abajo).</p>
         </div>
       )}
     </section>
@@ -119,9 +161,7 @@ function WeatherPanel() {
     setLoading(true);
     setError(null);
     try {
-      // El Encano, Nariño, if the browser does not share the location.
-      const where = await getPositionOnce().catch(() => ({ latitude: 1.1617, longitude: -77.1598 }));
-      setWeather(await api.currentWeather(where.latitude, where.longitude));
+      setWeather((await detectWeather()).weather);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo consultar el clima.");
     } finally {
@@ -159,6 +199,72 @@ function WeatherPanel() {
             <dd>{weather.wind_kmh ?? "—"} km/h</dd>
           </div>
         </dl>
+      )}
+    </section>
+  );
+}
+
+// Every prediction is saved in the delay_predictions table; this is that history, by pages.
+function HistoryPanel({ refresh }: { refresh: number }) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const history = useLoad(() => api.predictions(page, pageSize), [page, pageSize, refresh]);
+
+  return (
+    <section className="panel">
+      <h2>Historial de predicciones</h2>
+      <p className="muted">
+        Cada predicción queda guardada (tabla <code>delay_predictions</code>): las que se hacen en esta pantalla y la que
+        hace la IA automáticamente cada vez que un conductor inicia un recorrido.
+      </p>
+      {history.error ? (
+        <ErrorBox message={history.error} onRetry={history.reload} />
+      ) : !history.data ? (
+        <Loading />
+      ) : history.data.total === 0 ? (
+        <p className="muted">Todavía no hay predicciones guardadas.</p>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Ruta</th>
+                <th>Clima y vía</th>
+                <th>Paradas</th>
+                <th>Retraso</th>
+                <th>Hecha por</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.data.items.map((p) => (
+                <tr key={p.id}>
+                  <td>{formatDateTime(p.created_at)}</td>
+                  <td>{p.route_name ?? "Cualquiera"}</td>
+                  <td>
+                    {p.weather} · {p.road_condition}
+                  </td>
+                  <td>{p.stops_remaining}</td>
+                  <td>
+                    <strong>{p.predicted_minutes} min</strong>
+                    <br />
+                    <small className="muted">{p.model === "regression" ? "Regresión" : "Valores del catálogo"}</small>
+                  </td>
+                  <td>{p.created_by ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Pagination
+            page={history.data.page}
+            pages={history.data.pages}
+            total={history.data.total}
+            pageSize={pageSize}
+            onPage={setPage}
+            onPageSize={setPageSize}
+            noun="predicciones"
+          />
+        </div>
       )}
     </section>
   );
