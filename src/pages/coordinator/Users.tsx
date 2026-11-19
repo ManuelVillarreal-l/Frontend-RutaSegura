@@ -3,23 +3,42 @@
 
 import { useState, type FormEvent } from "react";
 import { api } from "../../api";
-import { useCatalog } from "../../auth";
+import { useCatalog, useCurrentUser } from "../../auth";
 import { ErrorBox, Loading, Notice, PageHeader } from "../../components/Feedback";
 import { PasswordField, SelectField, TextField } from "../../components/Fields";
+import { Pagination } from "../../components/Pagination";
 import { formatDateTime } from "../../format";
+import { StatusBadge } from "./Fleet";
 import { useLoad } from "../../hooks";
 import { check, FIELD_MESSAGES, passwordProblems, RULES } from "../../validation";
 
 export function Users() {
+  const me = useCurrentUser();
   const roles = useCatalog("roles");
   const [role, setRole] = useState("");
-  const users = useLoad(() => api.users(role || undefined), [role]);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  // Only the requested page is loaded from the API.
+  const users = useLoad(
+    () =>
+      api.usersPage({
+        page,
+        page_size: pageSize,
+        role: role || undefined,
+        q: search.trim() || undefined,
+        active: status === "" ? undefined : status === "active",
+      }),
+    [role, search, status, page, pageSize],
+  );
   const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function toggle(id: number, active: boolean) {
+  async function toggle(id: number, active: boolean, name: string) {
     try {
       await api.setUserActive(id, active);
+      setMessage(`${name} quedó ${active ? "activo" : "inactivo"}.`);
       await users.reload(true);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo cambiar el estado.");
@@ -46,14 +65,63 @@ export function Users() {
       {message && <Notice kind="success">{message}</Notice>}
 
       <div className="segmented" role="tablist" aria-label="Filtrar por rol">
-        <button type="button" role="tab" aria-selected={role === ""} className="segmented-item" onClick={() => setRole("")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={role === ""}
+          className="segmented-item"
+          onClick={() => {
+            setRole("");
+            setPage(1);
+          }}
+        >
           Todos
         </button>
         {roles.map((r) => (
-          <button key={r.code} type="button" role="tab" aria-selected={role === r.code} className="segmented-item" onClick={() => setRole(r.code)}>
+          <button
+            key={r.code}
+            type="button"
+            role="tab"
+            aria-selected={role === r.code}
+            className="segmented-item"
+            onClick={() => {
+              setRole(r.code);
+              setPage(1);
+            }}
+          >
             {r.name}
           </button>
         ))}
+      </div>
+
+      <div className="filters">
+        <label className="field">
+          <span className="field-label">Buscar</span>
+          <input
+            type="search"
+            value={search}
+            maxLength={60}
+            placeholder="Nombre, correo o documento"
+            onChange={(e) => {
+              setSearch(e.target.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9@._ -]/g, ""));
+              setPage(1);
+            }}
+          />
+        </label>
+        <SelectField
+          label="Estado"
+          required={false}
+          value={status}
+          onChange={(v) => {
+            setStatus(v);
+            setPage(1);
+          }}
+          options={[
+            { value: "", label: "Todos" },
+            { value: "active", label: "Activos" },
+            { value: "inactive", label: "Inactivos" },
+          ]}
+        />
       </div>
 
       {users.loading && !users.data ? (
@@ -70,12 +138,13 @@ export function Users() {
                 <th>Documento</th>
                 <th>Contacto</th>
                 <th>Último ingreso</th>
-                <th className="cell-actions">Estado</th>
+                <th>Estado</th>
+                <th className="cell-actions">Acción</th>
               </tr>
             </thead>
             <tbody>
-              {(users.data ?? []).map((u) => (
-                <tr key={u.id}>
+              {(users.data?.items ?? []).map((u) => (
+                <tr key={u.id} className={u.active ? "" : "is-inactive"}>
                   <td>
                     {u.first_name} {u.last_name}
                   </td>
@@ -89,15 +158,38 @@ export function Users() {
                     <small className="muted">{u.phone}</small>
                   </td>
                   <td>{formatDateTime(u.last_login_at)}</td>
+                  <td>
+                    <StatusBadge active={u.active} />
+                  </td>
                   <td className="cell-actions">
-                    <button type="button" className="button button-quiet" onClick={() => void toggle(u.id, !u.active)}>
-                      {u.active ? "Activo · desactivar" : "Inactivo · activar"}
-                    </button>
+                    {u.id === me.id ? (
+                      <small className="muted">Su cuenta</small>
+                    ) : (
+                      <button
+                        type="button"
+                        className={`button button-small ${u.active ? "button-quiet-danger" : "button-quiet"}`}
+                        onClick={() => void toggle(u.id, !u.active, `${u.first_name} ${u.last_name}`)}
+                      >
+                        {u.active ? "Desactivar" : "Activar"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {users.data && users.data.items.length === 0 && <p className="table-empty muted">Sin resultados.</p>}
+          {users.data && (
+            <Pagination
+              page={users.data.page}
+              pages={users.data.pages}
+              total={users.data.total}
+              pageSize={pageSize}
+              onPage={setPage}
+              onPageSize={setPageSize}
+              noun="usuarios"
+            />
+          )}
         </div>
       )}
     </>
