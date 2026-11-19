@@ -7,6 +7,7 @@ import { useCatalog } from "../../auth";
 import { RiskPill } from "../../components/Charts";
 import { ErrorBox, Loading, Notice, PageHeader } from "../../components/Feedback";
 import { SelectField, TextField } from "../../components/Fields";
+import { Pagination } from "../../components/Pagination";
 import { QrCard } from "../../components/QrCard";
 import { age, formatDateTime, RISK_LABEL } from "../../format";
 import { useLoad } from "../../hooks";
@@ -15,14 +16,17 @@ import { check, FIELD_MESSAGES, RULES } from "../../validation";
 
 export function Students() {
   const data = useLoad(async () => {
-    const [students, routes, schools, guardians] = await Promise.all([
-      api.students(),
-      api.routes(),
-      api.schools(),
-      api.users("guardian"),
-    ]);
-    return { students, routes, schools, guardians };
+    const [routes, schools, guardians] = await Promise.all([api.routes(), api.schools(), api.users("guardian")]);
+    return { routes, schools, guardians };
   }, []);
+  // Only one page of students is requested to the API (10, 25 or 50 rows).
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [routeFilter, setRouteFilter] = useState("");
+  const students = useLoad(
+    () => api.studentsPage({ page, page_size: pageSize, route_id: routeFilter ? Number(routeFilter) : undefined }),
+    [page, pageSize, routeFilter],
+  );
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Student[] | null>(null);
   const [selected, setSelected] = useState<Student | null>(null);
@@ -44,8 +48,8 @@ export function Students() {
   if (data.loading && !data.data) return <Loading />;
   if (data.error || !data.data) return <ErrorBox message={data.error ?? "Error"} onRetry={data.reload} />;
 
-  const { students, routes, schools } = data.data;
-  const list = found ?? students;
+  const { routes, schools } = data.data;
+  const list = found ?? students.data?.items ?? [];
   const routeName = (id: number | null) => routes.find((r) => r.id === id)?.name ?? "Sin ruta";
 
   return (
@@ -61,7 +65,7 @@ export function Students() {
           data={data.data}
           onCreated={async (student) => {
             setCreating(false);
-            await data.reload(true);
+            await students.reload(true);
             setSelected(student);
           }}
         />
@@ -78,6 +82,19 @@ export function Students() {
         />
         <small className="field-hint">Búsqueda por prefijo con un árbol AVL (sin importar tildes).</small>
       </label>
+      {!found && (
+        <div className="filters">
+          <SelectField
+            label="Ruta"
+            value={routeFilter}
+            onChange={(v) => {
+              setRouteFilter(v);
+              setPage(1);
+            }}
+            options={[{ value: "", label: "Todas las rutas" }, ...routes.map((r) => ({ value: r.id, label: r.name }))]}
+          />
+        </div>
+      )}
 
       <div className="split">
         <div className="table-wrap">
@@ -111,7 +128,21 @@ export function Students() {
               ))}
             </tbody>
           </table>
-          {list.length === 0 && <p className="table-empty muted">Sin resultados.</p>}
+          {students.loading && !found && <Loading />}
+          {students.error && !found && <ErrorBox message={students.error} onRetry={students.reload} />}
+          {!students.loading && list.length === 0 && <p className="table-empty muted">Sin resultados.</p>}
+          {!found && students.data && (
+            <Pagination
+              page={students.data.page}
+              pages={students.data.pages}
+              total={students.data.total}
+              pageSize={pageSize}
+              onPage={setPage}
+              onPageSize={setPageSize}
+              noun="estudiantes"
+            />
+          )}
+          {found && <p className="table-empty muted">{found.length} resultado(s) de la búsqueda.</p>}
         </div>
 
         {selected && (
@@ -125,7 +156,7 @@ export function Students() {
               setSelected(null);
               setFound(null);
               setQuery("");
-              await data.reload(true);
+              await students.reload(true);
             }}
           />
         )}
@@ -385,6 +416,9 @@ function StudentForm({ data, onCreated }: { data: FormData; onCreated: (s: Stude
 
       <fieldset className="fieldset">
         <legend>Acudientes (1 a 4)</legend>
+        {guardians.length > 1 && (
+          <p className="field-hint">Marque cuál es el acudiente principal: a él se le llama primero si hay una novedad.</p>
+        )}
         {guardians.map((row, index) => (
           <div key={index} className="guardian-row">
             <SelectField
@@ -401,9 +435,13 @@ function StudentForm({ data, onCreated }: { data: FormData; onCreated: (s: Stude
               onChange={(v) => setGuardians((list) => list.map((g, i) => (i === index ? { ...g, relationship_code: v } : g)))}
               options={relationships.map((r) => ({ value: r.code, label: r.name }))}
             />
-            <label className="radio">
-              <input type="radio" name="primary" checked={primary === index} onChange={() => setPrimary(index)} /> Principal
-            </label>
+            {guardians.length > 1 ? (
+              <label className="radio">
+                <input type="radio" name="primary" checked={primary === index} onChange={() => setPrimary(index)} /> Principal
+              </label>
+            ) : (
+              <span className="tag">Acudiente principal</span>
+            )}
             {guardians.length > 1 && (
               <button
                 type="button"
