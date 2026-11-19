@@ -1,6 +1,6 @@
 // Form fields with validation by regular expression, length limits and Spanish messages.
 
-import { useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { useId, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { check, PASSWORD_CHECKS, PASSWORD_MAX, type Rule } from "../validation";
 
 interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> {
@@ -70,31 +70,49 @@ interface PasswordFieldProps {
   withPolicy?: boolean;
 }
 
-// The password is always masked: there is no "show" button, it cannot be copied
-// and it is limited to 64 characters. It is hashed before being sent.
+// The password is masked by default; the eye button shows it to check for typos.
+// It cannot be copied, it is limited to 64 characters and it is hashed before being sent.
 export function PasswordField({ label = "Contraseña", value, onChange, autoComplete, withPolicy }: PasswordFieldProps) {
   const [capsLock, setCapsLock] = useState(false);
+  const [visible, setVisible] = useState(false);
+  // Unique id: a form can have two password fields (password and confirmation).
+  const id = `pw-${useId()}`;
   return (
     <div className="field">
-      <label className="field-label" htmlFor={`pw-${autoComplete}`}>
+      <label className="field-label" htmlFor={id}>
         {label}
         <small className="field-count" aria-hidden="true">
           {value.length}/{PASSWORD_MAX}
         </small>
       </label>
-      <input
-        id={`pw-${autoComplete}`}
-        type="password"
-        autoComplete={autoComplete}
-        required
-        maxLength={PASSWORD_MAX}
-        value={value}
-        spellCheck={false}
-        onChange={(e) => onChange(e.target.value.slice(0, PASSWORD_MAX))}
-        onKeyUp={(e) => setCapsLock(e.getModifierState("CapsLock"))}
-        onCopy={(e) => e.preventDefault()}
-        onCut={(e) => e.preventDefault()}
-      />
+      <div className="password-input">
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          autoComplete={autoComplete}
+          autoCapitalize="off"
+          autoCorrect="off"
+          required
+          maxLength={PASSWORD_MAX}
+          value={value}
+          spellCheck={false}
+          onChange={(e) => onChange(e.target.value.slice(0, PASSWORD_MAX))}
+          onKeyUp={(e) => setCapsLock(e.getModifierState("CapsLock"))}
+          onCopy={(e) => e.preventDefault()}
+          onCut={(e) => e.preventDefault()}
+        />
+        <button
+          type="button"
+          className="password-toggle"
+          aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+          aria-pressed={visible}
+          aria-controls={id}
+          title={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+          onClick={() => setVisible((v) => !v)}
+        >
+          <EyeIcon crossed={visible} />
+        </button>
+      </div>
       {capsLock && <small className="field-error">Bloq Mayús está activado.</small>}
       {withPolicy && (
         <ul className="password-policy" aria-label="Requisitos de la contraseña">
@@ -112,6 +130,16 @@ export function PasswordField({ label = "Contraseña", value, onChange, autoComp
         <LockIcon /> Se cifra en su dispositivo (SHA-256) antes de enviarse; nunca viaja ni se guarda tal cual.
       </small>
     </div>
+  );
+}
+
+function EyeIcon({ crossed }: { crossed: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {crossed && <path d="M4 4l16 16" />}
+    </svg>
   );
 }
 
