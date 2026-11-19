@@ -53,6 +53,8 @@ export interface Driver {
   license_expires_on: string;
   license_valid: boolean;
   vehicle_plate: string | null;
+  campus_id: number | null;
+  campus_name: string | null;
 }
 
 export interface Person {
@@ -85,6 +87,8 @@ export interface Vehicle {
   model_year: number;
   capacity: number;
   active: boolean;
+  campus_id: number | null;
+  campus_name: string | null;
 }
 
 export interface Route {
@@ -330,4 +334,25 @@ export interface AttendanceMatrix {
   cells: string[][];
   present_per_day: number[];
   legend: Record<string, string>;
+}
+
+// One page of a long list (the server only reads the rows of that page).
+export interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export interface PredictionRecord {
+  id: number;
+  created_at: string;
+  route_name: string | null;
+  weather: string;
+  road_condition: string;
+  stops_remaining: number;
+  predicted_minutes: number;
+  model: "regression" | "baseline";
+  created_by: string | null;
 }

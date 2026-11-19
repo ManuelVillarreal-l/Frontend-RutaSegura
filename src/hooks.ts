@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type OfflineEvent } from "./api";
+import type { CurrentWeather } from "./types";
 
 // Runs an async loader and exposes { data, error, loading, reload }.
 export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
@@ -190,4 +191,15 @@ export function useOfflineQueue(onSynced?: () => void) {
   }, [sync]);
 
   return { events, online, syncing, lastResult, add, sync };
+}
+
+// Current weather where the device is (GPS + Open-Meteo through the API), translated to the
+// weather catalog of the database. Without GPS permission it uses El Encano (Nariño).
+export async function detectWeather(): Promise<{ weather: CurrentWeather; usedGps: boolean }> {
+  let usedGps = true;
+  const where = await getPositionOnce().catch(() => {
+    usedGps = false;
+    return { latitude: 1.1617, longitude: -77.1598 };
+  });
+  return { weather: await api.currentWeather(where.latitude, where.longitude), usedGps };
 }

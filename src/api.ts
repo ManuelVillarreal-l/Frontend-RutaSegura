@@ -5,6 +5,7 @@ import type {
   AbsenceRisk,
   AttendanceEvent,
   AttendanceMatrix,
+  Campus,
   AuditEntry,
   BoardingQueue,
   BusLocation,
@@ -18,7 +19,9 @@ import type {
   Incident,
   Itinerary,
   Notification,
+  Page,
   Person,
+  PredictionRecord,
   Route,
   RouteOptimization,
   School,
@@ -233,16 +236,19 @@ export const api = {
 
   // Users
   users: (role?: string) => request<User[]>(`/api/users/${query({ role })}`),
+  usersPage: (params: { page: number; page_size: number; role?: string; q?: string; active?: boolean }) =>
+    request<Page<User>>(`/api/users/paged${query(params)}`),
   createUser: async (data: NewUser) =>
     post<User>("/api/users/", { ...data, password: await passwordDigest(data.email, data.password) }),
   setUserActive: (id: number, active: boolean) => patch<User>(`/api/users/${id}/status`, { active }),
-  drivers: () => request<Driver[]>("/api/users/drivers"),
+  drivers: (campusId?: number) => request<Driver[]>(`/api/users/drivers${query({ campus_id: campusId })}`),
   createDriver: (data: {
     user_id: number;
     license_number: string;
     license_category: string;
     license_expires_on: string;
     vehicle_id: number | null;
+    campus_id: number | null;
   }) => post<Driver>("/api/users/drivers", data),
   driverRotation: (driverUserId: number) =>
     request<{ current: Person; previous: Person; next: Person; ring: Person[] }>(
@@ -264,9 +270,13 @@ export const api = {
   // Organization
   schools: () => request<School[]>("/api/schools"),
   schoolTree: () => request<{ total_leaves: number; tree: TreeNode }>("/api/schools/tree"),
-  vehicles: () => request<Vehicle[]>("/api/vehicles"),
-  createVehicle: (data: { plate: string; brand: string; model_year: number; capacity: number }) =>
+  createCampus: (data: { school_id: number; name: string; address: string | null }) =>
+    post<Campus>("/api/campuses", data),
+  vehicles: (campusId?: number, activeOnly = false) =>
+    request<Vehicle[]>(`/api/vehicles${query({ campus_id: campusId, active_only: activeOnly || undefined })}`),
+  createVehicle: (data: { plate: string; brand: string; model_year: number; capacity: number; campus_id: number }) =>
     post<Vehicle>("/api/vehicles", data),
+  setVehicleActive: (id: number, active: boolean) => put<Vehicle>(`/api/vehicles/${id}`, { active }),
 
   // Routes
   routes: () => request<Route[]>("/api/routes/"),
@@ -288,6 +298,8 @@ export const api = {
 
   // Students
   students: () => request<Student[]>("/api/students/"),
+  studentsPage: (params: { page: number; page_size: number; q?: string; route_id?: number; campus_id?: number }) =>
+    request<Page<Student>>(`/api/students/paged${query(params)}`),
   searchStudents: (q: string) => request<Student[]>(`/api/students/search${query({ q })}`),
   createStudent: (data: NewStudent) => post<Student>("/api/students/", data),
   history: (studentId: number, limit = 30) =>
@@ -366,9 +378,12 @@ export const api = {
     road_condition_code: string;
     stops_remaining: number;
     hour: number;
+    preview?: boolean;
   }) => post<DelayPrediction>("/api/ai/delay", data),
   currentWeather: (latitude: number, longitude: number) =>
     request<CurrentWeather>(`/api/ai/weather${query({ latitude, longitude })}`),
+  predictions: (page: number, pageSize: number) =>
+    request<Page<PredictionRecord>>(`/api/ai/predictions${query({ page, page_size: pageSize })}`),
   structures: () => request<StructureInfo[]>("/api/structures"),
 };
 
