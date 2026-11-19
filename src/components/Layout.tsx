@@ -18,7 +18,6 @@ const NAV: Record<RoleCode, { to: string; label: string }[]> = {
     { to: "/catalogos", label: "Catálogos" },
     { to: "/inteligencia", label: "Inteligencia" },
     { to: "/incidentes", label: "Incidentes" },
-    { to: "/estructuras", label: "Estructuras" },
     { to: "/auditoria", label: "Auditoría" },
   ],
   driver: [
@@ -39,7 +38,7 @@ export function Layout() {
   const { logout } = useSession();
   const slow = useSlowServer();
   const unread = useUnreadCount();
-  const links = [...NAV[user.role.code], { to: "/notificaciones", label: "Avisos" }];
+  const links = [...NAV[user.role.code], { to: "/notificaciones", label: "Avisos" }, { to: "/ayuda", label: "Ayuda" }];
 
   return (
     <div className="app">

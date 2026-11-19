@@ -1,11 +1,10 @@
-// Incidents, audit log and the data structures used by the system.
+// Incidents and the audit log (who did what and when).
 
 import { useState } from "react";
 import { api } from "../../api";
 import { ErrorBox, Loading, PageHeader } from "../../components/Feedback";
 import { formatDateTime } from "../../format";
 import { useLoad } from "../../hooks";
-import type { TreeNode } from "../../types";
 
 export function Incidents() {
   const [openOnly, setOpenOnly] = useState(true);
@@ -156,52 +155,3 @@ export function Audit() {
   );
 }
 
-export function Structures() {
-  const data = useLoad(async () => {
-    const [structures, tree] = await Promise.all([api.structures(), api.schoolTree()]);
-    return { structures, tree };
-  }, []);
-
-  if (data.loading && !data.data) return <Loading />;
-  if (data.error || !data.data) return <ErrorBox message={data.error ?? "Error"} onRetry={data.reload} />;
-
-  return (
-    <>
-      <PageHeader title="Estructuras de datos" />
-      <p className="lead">
-        Las 10 estructuras están implementadas a mano en el servidor (carpeta <code>app/structures</code>) y cada una
-        resuelve una tarea real de la aplicación.
-      </p>
-      <div className="structure-grid">
-        {data.data.structures.map((s) => (
-          <article key={s.name} className="panel structure">
-            <h3>{s.name}</h3>
-            <p>{s.use}</p>
-            <p className="muted small">
-              <code>{s.file}</code> · {s.complexity}
-            </p>
-            <p className="small">
-              <code>{s.endpoint}</code>
-            </p>
-          </article>
-        ))}
-      </div>
-      <section className="panel">
-        <h2>Árbol n-ario: institución → sede → grado → estudiantes</h2>
-        <p className="muted">{data.data.tree.total_leaves} estudiantes (hojas del árbol).</p>
-        <Tree node={data.data.tree.tree} />
-      </section>
-    </>
-  );
-}
-
-function Tree({ node }: { node: TreeNode }) {
-  return (
-    <ul className="tree">
-      <li>
-        <span className={`tree-node tree-${node.data.type}`}>{node.name}</span>
-        {node.children.length > 0 && node.children.map((child) => <Tree key={`${child.data.type}-${child.data.id}-${child.name}`} node={child} />)}
-      </li>
-    </ul>
-  );
-}

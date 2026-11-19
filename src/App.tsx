@@ -3,13 +3,14 @@ import { SessionProvider, useSession } from "./auth";
 import { Loading } from "./components/Feedback";
 import { Layout } from "./components/Layout";
 import { Login } from "./pages/Login";
+import { Help } from "./pages/Help";
 import { Notifications } from "./pages/Notifications";
 import { Catalogs } from "./pages/coordinator/Catalogs";
 import { Dashboard } from "./pages/coordinator/Dashboard";
 import { Fleet } from "./pages/coordinator/Fleet";
 import { Intelligence } from "./pages/coordinator/Intelligence";
 import { Attendance } from "./pages/coordinator/Attendance";
-import { Audit, Incidents, Structures } from "./pages/coordinator/Monitoring";
+import { Audit, Incidents } from "./pages/coordinator/Monitoring";
 import { RoutesPage } from "./pages/coordinator/RoutesPage";
 import { Students } from "./pages/coordinator/Students";
 import { Trips } from "./pages/coordinator/Trips";
@@ -49,7 +50,7 @@ function AppRoutes() {
             <Route path="catalogos" element={<Catalogs />} />
             <Route path="inteligencia" element={<Intelligence />} />
             <Route path="incidentes" element={<Incidents />} />
-            <Route path="estructuras" element={<Structures />} />
+            <Route path="estructuras" element={<Navigate to="/ayuda" replace />} />
             <Route path="auditoria" element={<Audit />} />
           </>
         )}
@@ -61,6 +62,7 @@ function AppRoutes() {
         )}
         {role === "guardian" && <Route index element={<GuardianHome />} />}
         <Route path="notificaciones" element={<Notifications />} />
+        <Route path="ayuda" element={<Help />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
