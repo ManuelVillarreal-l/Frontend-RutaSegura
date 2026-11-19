@@ -26,20 +26,20 @@ first request takes about one minute. Open the app a few minutes before a presen
 | Path | Role | Page |
 |---|---|---|
 | `/` | Coordinator | Overview (map and attendance chart) |
-| `/estudiantes` | Coordinator | Students, guardians and QR ID card |
+| `/estudiantes` | Coordinator | Students by pages (10/25/50), guardians and QR ID card |
 | `/rutas` | Coordinator | Routes, stops, Dijkstra and AI optimization |
 | `/recorridos` | Coordinator | Schedule, edit, cancel and follow trips |
 | `/asistencia` | Coordinator | Attendance matrix (students × school days) |
-| `/usuarios` | Coordinator | Users and roles |
-| `/flota` | Coordinator | Vehicles and licenses |
+| `/usuarios` | Coordinator | Users by pages, status column and activate / deactivate |
+| `/flota` | Coordinator | Campuses (sedes), buses and driver licenses of each campus |
 | `/catalogos` | Coordinator | Weather and road catalogs |
-| `/inteligencia` | Coordinator, driver, monitor | AI: delay prediction and route optimization |
+| `/inteligencia` | Coordinator, driver, monitor | AI: delay prediction, weather by GPS and saved prediction history |
 | `/incidentes` | Coordinator | Incidents |
-| `/estructuras` | Coordinator | Map of the data structures used by the API |
 | `/auditoria` | Coordinator | Audit log |
 | `/` | Driver / monitor | Current trip (GPS, QR scanner, boarding queue, undo) |
 | `/` | Guardian | Children, bus on the map and arrival time |
-| `/notificaciones` | Everyone | Notifications |
+| `/notificaciones` | Everyone | Notifications (boarding, delay, bus approaching, child did not board) |
+| `/ayuda` | Everyone | Help: user guide by role, FAQ and (coordinator) technical documentation |
 
 Any other path redirects to `/`. `render.yaml` rewrites every path to `index.html`, so
 reloading the browser on any page works.
