@@ -142,7 +142,23 @@ function errorMessage(status: number, body: unknown): string {
 
 // ---------- Request helper ----------
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// Changes that are already on their way to the server. If the same change is sent again
+// before the first one answers (double click, impatient taps), it reuses that request
+// instead of sending a duplicate, so the user sees one result and no "ya existe" error.
+const inFlight = new Map<string, Promise<unknown>>();
+
+function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method ?? "GET").toUpperCase();
+  if (method === "GET") return send<T>(path, options);
+  const key = `${method} ${path} ${typeof options.body === "string" ? options.body : ""}`;
+  const pending = inFlight.get(key);
+  if (pending) return pending as Promise<T>;
+  const promise = send<T>(path, options).finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+  return promise;
+}
+
+async function send<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = loadToken();
   const headers = new Headers(options.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
