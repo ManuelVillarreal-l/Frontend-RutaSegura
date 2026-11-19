@@ -186,8 +186,10 @@ function TripForm({
   // Drivers and buses depend on the campus of the chosen route.
   const route = routes.find((r) => r.id === Number(routeId));
   const campus = campuses.find((c) => c.id === route?.campus_id);
-  const campusDrivers = route ? licenses.filter((d) => d.campus_id === route.campus_id && d.license_valid) : [];
-  const campusVehicles = route ? vehicles.filter((v) => v.active && v.campus_id === route.campus_id) : [];
+  // Buses or drivers registered before campuses existed (no campus) can work anywhere.
+  const sameCampus = (campusId: number | null) => campusId === null || campusId === route?.campus_id;
+  const campusDrivers = route ? licenses.filter((d) => sameCampus(d.campus_id) && d.license_valid) : [];
+  const campusVehicles = route ? vehicles.filter((v) => v.active && sameCampus(v.campus_id)) : [];
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const max = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
 

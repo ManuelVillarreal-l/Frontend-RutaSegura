@@ -226,7 +226,7 @@ function RouteForm({
   const [tried, setTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The bus list depends on the campus: only active buses of the chosen campus.
-  const campusVehicles = vehicles.filter((v) => v.active && String(v.campus_id) === campusId);
+  const campusVehicles = vehicles.filter((v) => v.active && (v.campus_id === null || String(v.campus_id) === campusId));
 
   async function submit(event: FormEvent) {
     event.preventDefault();
