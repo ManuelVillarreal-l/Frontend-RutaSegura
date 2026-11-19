@@ -2,12 +2,14 @@
 // shortest path (Dijkstra), outbound/return itinerary and AI route optimization.
 
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../../api";
+import { CampusForm } from "../../components/CampusForm";
 import { ErrorBox, Loading, Notice, PageHeader } from "../../components/Feedback";
 import { isValidNumber, NumberField, SelectField, TextField } from "../../components/Fields";
 import { MapView } from "../../components/MapView";
 import { useLoad } from "../../hooks";
-import type { Route, RouteOptimization, ShortestPath } from "../../types";
+import type { Route, RouteOptimization, School, ShortestPath, Vehicle } from "../../types";
 import { check, RULES } from "../../validation";
 
 export function RoutesPage() {
@@ -33,8 +35,9 @@ export function RoutesPage() {
 
       {creating && (
         <RouteForm
-          campuses={schools.flatMap((s) => s.campuses)}
+          schools={schools}
           vehicles={vehicles}
+          onCampusCreated={() => base.reload(true)}
           onCreated={async (route) => {
             setCreating(false);
             await base.reload(true);
@@ -54,7 +57,10 @@ export function RoutesPage() {
             onClick={() => setSelectedId(r.id)}
           >
             {r.name}
-            <small>{vehicles.find((v) => v.id === r.vehicle_id)?.plate ?? "Sin bus"}</small>
+            <small>
+              {schools.flatMap((sc) => sc.campuses).find((c) => c.id === r.campus_id)?.name ?? "Sin sede"} ·{" "}
+              {vehicles.find((v) => v.id === r.vehicle_id)?.plate ?? "sin bus"}
+            </small>
           </button>
         ))}
       </div>
@@ -201,20 +207,26 @@ function RouteDetail({ route }: { route: Route }) {
 }
 
 function RouteForm({
-  campuses,
+  schools,
   vehicles,
   onCreated,
+  onCampusCreated,
 }: {
-  campuses: { id: number; name: string }[];
-  vehicles: { id: number; plate: string }[];
+  schools: School[];
+  vehicles: Vehicle[];
   onCreated: (r: Route) => void;
+  onCampusCreated: () => Promise<void>;
 }) {
+  const campuses = schools.flatMap((s) => s.campuses);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [campusId, setCampusId] = useState(String(campuses[0]?.id ?? ""));
   const [vehicleId, setVehicleId] = useState("");
+  const [addingCampus, setAddingCampus] = useState(false);
   const [tried, setTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The bus list depends on the campus: only active buses of the chosen campus.
+  const campusVehicles = vehicles.filter((v) => v.active && String(v.campus_id) === campusId);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -235,28 +247,62 @@ function RouteForm({
   }
 
   return (
-    <form className="panel form" onSubmit={submit} noValidate>
-      <h2>Nueva ruta</h2>
-      <div className="form-grid">
-        <TextField label="Nombre" rule={RULES.label} value={name} onChange={setName} placeholder="Ruta Rural 04" showErrors={tried} />
-        <TextField label="Descripción" rule={RULES.label} required={false} value={description} onChange={setDescription} showErrors={tried} />
-        <SelectField label="Sede" value={campusId} onChange={setCampusId} options={campuses.map((c) => ({ value: c.id, label: c.name }))} />
-        <SelectField
-          label="Bus"
-          required={false}
-          value={vehicleId}
-          onChange={setVehicleId}
-          placeholder="Sin asignar"
-          options={vehicles.map((v) => ({ value: v.id, label: v.plate }))}
-        />
-      </div>
-      {error && <p className="form-error">{error}</p>}
-      <div className="form-actions">
-        <button type="submit" className="button button-primary">
-          Crear ruta
-        </button>
-      </div>
-    </form>
+    <>
+      <form className="panel form" onSubmit={submit} noValidate>
+        <h2>Nueva ruta</h2>
+        <div className="form-grid">
+          <TextField label="Nombre" rule={RULES.label} value={name} onChange={setName} placeholder="Ruta Rural 04" showErrors={tried} />
+          <TextField label="Descripción" rule={RULES.label} required={false} value={description} onChange={setDescription} showErrors={tried} />
+          <div className="field-with-action">
+            <SelectField
+              label="Sede"
+              value={campusId}
+              onChange={(v) => {
+                setCampusId(v);
+                setVehicleId("");
+              }}
+              options={campuses.map((c) => ({ value: c.id, label: c.name }))}
+            />
+            <button type="button" className="button button-quiet button-small" onClick={() => setAddingCampus((v) => !v)}>
+              {addingCampus ? "Cancelar" : "+ Nueva sede"}
+            </button>
+          </div>
+          <SelectField
+            label="Bus de la sede"
+            required={false}
+            value={vehicleId}
+            onChange={setVehicleId}
+            placeholder={campusVehicles.length ? "Sin asignar" : "La sede no tiene buses activos"}
+            options={campusVehicles.map((v) => ({ value: v.id, label: `${v.plate} · ${v.brand} · ${v.capacity} puestos` }))}
+          />
+        </div>
+        {campusVehicles.length === 0 && (
+          <p className="field-hint">
+            Para agregar un bus a esta sede vaya a <Link to="/flota">Sedes y flota</Link>.
+          </p>
+        )}
+        {error && <p className="form-error">{error}</p>}
+        <div className="form-actions">
+          <button type="submit" className="button button-primary">
+            Crear ruta
+          </button>
+        </div>
+      </form>
+      {addingCampus && (
+        <section className="panel">
+          <CampusForm
+            schools={schools}
+            onCancel={() => setAddingCampus(false)}
+            onCreated={async (campus) => {
+              setAddingCampus(false);
+              await onCampusCreated();
+              setCampusId(String(campus.id));
+              setVehicleId("");
+            }}
+          />
+        </section>
+      )}
+    </>
   );
 }
 

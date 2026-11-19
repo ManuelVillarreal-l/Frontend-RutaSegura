@@ -9,7 +9,7 @@ import { SelectField } from "../../components/Fields";
 import { MapView } from "../../components/MapView";
 import { DIRECTION_LABEL, formatPlainDate, formatTime, minutesAgo, todayKey } from "../../format";
 import { useInterval, useLoad } from "../../hooks";
-import type { Route, Trip, User, Vehicle } from "../../types";
+import type { Campus, Driver, Route, Trip, User, Vehicle } from "../../types";
 
 export function Trips() {
   const statuses = useCatalog("trip_statuses");
@@ -18,20 +18,22 @@ export function Trips() {
   const following = Number(params.get("ver")) || null;
 
   const base = useLoad(async () => {
-    const [routes, drivers, monitors, vehicles] = await Promise.all([
+    const [routes, drivers, monitors, vehicles, licenses, schools] = await Promise.all([
       api.routes(),
       api.users("driver"),
       api.users("monitor"),
       api.vehicles(),
+      api.drivers(),
+      api.schools(),
     ]);
-    return { routes, drivers, monitors, vehicles };
+    return { routes, drivers, monitors, vehicles, licenses, schools };
   }, []);
   const trips = useLoad(() => api.trips(status || undefined), [status]);
   useInterval(() => void trips.reload(true), 30_000);
 
   if (base.loading && !base.data) return <Loading />;
   if (base.error || !base.data) return <ErrorBox message={base.error ?? "Error"} onRetry={base.reload} />;
-  const { routes, drivers, monitors, vehicles } = base.data;
+  const { routes, drivers, monitors, vehicles, licenses, schools } = base.data;
   const routeName = (id: number) => routes.find((r) => r.id === id)?.name ?? `Ruta ${id}`;
   const person = (list: User[], id: number | null) => {
     const u = list.find((x) => x.id === id);
@@ -45,7 +47,14 @@ export function Trips() {
   return (
     <>
       <PageHeader title="Recorridos" />
-      <TripForm routes={routes} drivers={drivers} monitors={monitors} vehicles={vehicles} onCreated={() => trips.reload(true)} />
+      <TripForm
+        routes={routes}
+        licenses={licenses}
+        monitors={monitors}
+        vehicles={vehicles}
+        campuses={schools.flatMap((sc) => sc.campuses)}
+        onCreated={() => trips.reload(true)}
+      />
 
       {followed && (
         <LiveTrip trip={followed} routeName={routeName(followed.route_id)} onClose={() => setParams({})} />
@@ -155,22 +164,30 @@ function LiveTrip({ trip, routeName, onClose }: { trip: Trip; routeName: string;
 
 function TripForm({
   routes,
-  drivers,
+  licenses,
   monitors,
   vehicles,
+  campuses,
   onCreated,
 }: {
   routes: Route[];
-  drivers: User[];
+  licenses: Driver[];
   monitors: User[];
   vehicles: Vehicle[];
+  campuses: Campus[];
   onCreated: () => void;
 }) {
   const [routeId, setRouteId] = useState("");
   const [direction, setDirection] = useState<"outbound" | "return">("outbound");
   const [date, setDate] = useState(todayKey());
   const [driverId, setDriverId] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
   const [monitorId, setMonitorId] = useState("");
+  // Drivers and buses depend on the campus of the chosen route.
+  const route = routes.find((r) => r.id === Number(routeId));
+  const campus = campuses.find((c) => c.id === route?.campus_id);
+  const campusDrivers = route ? licenses.filter((d) => d.campus_id === route.campus_id && d.license_valid) : [];
+  const campusVehicles = route ? vehicles.filter((v) => v.active && v.campus_id === route.campus_id) : [];
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const max = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
 
@@ -180,13 +197,12 @@ function TripForm({
       setMessage({ ok: false, text: "Seleccione ruta, conductor y fecha." });
       return;
     }
-    const route = routes.find((r) => r.id === Number(routeId));
     try {
       await api.createTrip({
         route_id: Number(routeId),
         driver_id: Number(driverId),
         monitor_id: monitorId ? Number(monitorId) : null,
-        vehicle_id: route?.vehicle_id ?? null,
+        vehicle_id: vehicleId ? Number(vehicleId) : (route?.vehicle_id ?? null),
         direction,
         scheduled_date: date,
       });
@@ -201,7 +217,18 @@ function TripForm({
     <form className="panel form" onSubmit={submit} noValidate>
       <h2>Programar recorrido</h2>
       <div className="form-grid">
-        <SelectField label="Ruta" value={routeId} onChange={setRouteId} placeholder="Seleccione…" options={routes.map((r) => ({ value: r.id, label: r.name }))} />
+        <SelectField
+          label="Ruta"
+          value={routeId}
+          onChange={(v) => {
+            const chosen = routes.find((r) => r.id === Number(v));
+            setRouteId(v);
+            setDriverId("");
+            setVehicleId(chosen?.vehicle_id ? String(chosen.vehicle_id) : "");
+          }}
+          placeholder="Seleccione…"
+          options={routes.filter((r) => r.active).map((r) => ({ value: r.id, label: r.name }))}
+        />
         <SelectField
           label="Sentido"
           value={direction}
@@ -216,11 +243,21 @@ function TripForm({
           <input type="date" value={date} min={todayKey()} max={max} required onChange={(e) => setDate(e.target.value)} />
         </label>
         <SelectField
-          label="Conductor"
+          label={campus ? `Conductor de ${campus.name}` : "Conductor"}
           value={driverId}
           onChange={setDriverId}
-          placeholder="Seleccione…"
-          options={drivers.filter((d) => d.active).map((d) => ({ value: d.id, label: `${d.first_name} ${d.last_name}` }))}
+          disabled={!route}
+          placeholder={!route ? "Elija primero la ruta" : campusDrivers.length ? "Seleccione…" : "La sede no tiene conductores"}
+          options={campusDrivers.map((d) => ({ value: d.user_id, label: d.full_name }))}
+        />
+        <SelectField
+          label="Bus"
+          required={false}
+          value={vehicleId}
+          onChange={setVehicleId}
+          disabled={!route}
+          placeholder={!route ? "Elija primero la ruta" : campusVehicles.length ? "Bus de la ruta" : "La sede no tiene buses"}
+          options={campusVehicles.map((v) => ({ value: v.id, label: `${v.plate} · ${v.brand}` }))}
         />
         <SelectField
           label="Monitor"
@@ -231,9 +268,9 @@ function TripForm({
           options={monitors.filter((m) => m.active).map((m) => ({ value: m.id, label: `${m.first_name} ${m.last_name}` }))}
         />
       </div>
-      {vehicles.length > 0 && routeId && (
+      {route && (
         <small className="muted">
-          Bus: {vehicles.find((v) => v.id === routes.find((r) => r.id === Number(routeId))?.vehicle_id)?.plate ?? "sin asignar"}
+          Sede: {campus?.name ?? "—"} · solo se muestran los conductores con licencia vigente y los buses de esta sede.
         </small>
       )}
       {message && <p className={message.ok ? "form-ok" : "form-error"}>{message.text}</p>}
